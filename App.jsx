@@ -4,7 +4,23 @@ import Board from './Board.jsx';
 import Search from './Search.jsx';
 import TicketModal from './TicketModal.jsx';
 
+const ACCESS = import.meta.env.VITE_ACCESS_PASSWORD || '';
+
+function Logo({ size = 30 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Jiralike">
+      <rect width="28" height="28" rx="7" fill="#2563eb" />
+      <rect x="6" y="9" width="4" height="13" rx="1.4" fill="#fff" />
+      <rect x="12" y="6" width="4" height="16" rx="1.4" fill="#ffffff" fillOpacity="0.92" />
+      <rect x="18" y="12" width="4" height="10" rx="1.4" fill="#ffffff" fillOpacity="0.8" />
+    </svg>
+  );
+}
+
 export default function App() {
+  const [ok, setOk] = useState(() => !ACCESS || sessionStorage.getItem('jira_ok') === '1');
+  const [pwErr, setPwErr] = useState('');
+
   const [projets, setProjets] = useState([]);
   const [projetId, setProjetId] = useState(null);
   const [tab, setTab] = useState('board');
@@ -13,18 +29,40 @@ export default function App() {
   const [nom, setNomState] = useState(getNom());
 
   useEffect(() => {
+    if (!ok || !nom) return;
     listProjets().then(p => {
       setProjets(p);
       if (p.length && !projetId) setProjetId(p[0].id);
     }).catch(console.error);
-  }, []);
+  }, [ok, nom]);
 
-  // Demande du prénom (attribution souple, stocké en local)
+  // 1) Portail mot de passe partagé (style Wikifluence)
+  if (!ok) {
+    return (
+      <div className="login">
+        <form className="box" onSubmit={e => {
+          e.preventDefault();
+          if (e.target.pw.value === ACCESS) { sessionStorage.setItem('jira_ok', '1'); setOk(true); }
+          else setPwErr('Mot de passe incorrect.');
+        }}>
+          <Logo size={40} />
+          <h1>Jiralike</h1>
+          <div className="muted">Accès réservé. Saisis le mot de passe d'équipe.</div>
+          <label>Mot de passe</label>
+          <input className="input" name="pw" type="password" autoFocus required />
+          <button className="btn">Entrer</button>
+          {pwErr && <div className="err">{pwErr}</div>}
+        </form>
+      </div>
+    );
+  }
+
+  // 2) Prénom (attribution souple, stocké en local)
   if (!nom) {
     return (
       <div className="login">
         <form className="box" onSubmit={e => { e.preventDefault(); const v = e.target.nom.value.trim(); if (v) { setNom(v); setNomState(v); } }}>
-          <div className="logo">J</div>
+          <Logo size={40} />
           <h1>Jiralike</h1>
           <div className="muted">Ton prénom (pour signer tes commentaires).</div>
           <label>Prénom</label>
@@ -48,7 +86,7 @@ export default function App() {
   return (
     <>
       <header className="app-header">
-        <div className="logo">J</div>
+        <Logo size={28} />
         <div className="brand">Jiralike</div>
         <select className="input" value={projetId || ''} onChange={e => setProjetId(e.target.value)}>
           {projets.length === 0 && <option value="">Aucun projet</option>}
