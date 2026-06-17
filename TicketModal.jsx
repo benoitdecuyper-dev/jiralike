@@ -1,94 +1,121 @@
-:root{
-  --bg:#f4f6f8; --card:#fff; --ink:#1f2937; --sub:#6b7280; --line:#e5e7eb;
-  --accent:#2563eb; --accent-soft:#e8efff;
-  --todo:#64748b; --prog:#d97706; --block:#7c3aed; --done:#1d9e75;
-  --p-haute:#dc2626; --p-moy:#d97706; --p-basse:#64748b;
-  --radius:10px; --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.04);
+import { useEffect, useState } from 'react';
+import { updateTicket, deleteTicket, listCommentaires, addCommentaire } from './api.js';
+import { STATUTS, statutMeta } from './Board.jsx';
+
+const PRIORITES = ['basse', 'moyenne', 'haute'];
+const TYPES = ['tache', 'bug'];
+
+export default function TicketModal({ ticket, onClose, onChanged }) {
+  const [t, setT] = useState(ticket);
+  const [titre, setTitre] = useState(ticket.titre);
+  const [desc, setDesc] = useState(ticket.description || '');
+  const [assigne, setAssigne] = useState(ticket.assigne_nom || '');
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { listCommentaires(t.id).then(setComments).catch(console.error); }, [t.id]);
+
+  async function patch(fields) {
+    const updated = await updateTicket(t.id, fields);
+    setT(updated);
+    onChanged?.();
+  }
+  async function saveText() {
+    setSaving(true);
+    try { await patch({ titre: titre.trim(), description: desc, assigne_nom: assigne.trim() || null }); }
+    finally { setSaving(false); }
+  }
+  async function send() {
+    if (!newComment.trim()) return;
+    const c = await addCommentaire(t.id, newComment.trim());
+    setComments(cs => [...cs, c]);
+    setNewComment('');
+  }
+  async function remove() {
+    if (!confirm('Supprimer ce ticket ?')) return;
+    await deleteTicket(t.id);
+    onChanged?.();
+    onClose();
+  }
+
+  const meta = statutMeta(t.statut);
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="head">
+          <div className="row" style={{ gap: 8 }}>
+            <span className={`type ${t.type}`}>{t.type === 'bug' ? 'Bug' : 'Tâche'}</span>
+            <span className="key">{t.id.slice(0, 8)}</span>
+          </div>
+          <button className="btn ghost" onClick={onClose}>Fermer</button>
+        </div>
+        <div className="body">
+          <div>
+            <input className="input" style={{ width: '100%', fontSize: 18, fontWeight: 700 }}
+                   value={titre} onChange={e => setTitre(e.target.value)} onBlur={saveText} />
+            <div className="section-lbl">Description</div>
+            <textarea className="desc" style={{ width: '100%', minHeight: 90 }}
+                      value={desc} onChange={e => setDesc(e.target.value)} onBlur={saveText} />
+            {saving && <div className="muted" style={{ fontSize: 12 }}>Enregistrement…</div>}
+
+            <div className="section-lbl">Commentaires ({comments.length})</div>
+            {comments.map(c => (
+              <div className="comment" key={c.id}>
+                <div className="av-sm">{(c.auteur_nom || '?').slice(0, 2).toUpperCase()}</div>
+                <div className="c-body">
+                  <span className="who">{c.auteur_nom || 'Anonyme'}</span>
+                  <span className="when">{new Date(c.cree_le).toLocaleString('fr-FR')}</span>
+                  <div>{c.contenu}</div>
+                </div>
+              </div>
+            ))}
+            <div className="comment">
+              <textarea className="input" style={{ flex: 1 }} placeholder="Ajouter un commentaire…"
+                        value={newComment} onChange={e => setNewComment(e.target.value)} />
+            </div>
+            <button className="btn" onClick={send} style={{ marginTop: 8 }}>Commenter</button>
+          </div>
+
+          <div className="side">
+            <div className="field">
+              <div className="k">Statut</div>
+              <select className="input" value={t.statut} onChange={e => patch({ statut: e.target.value })}>
+                {STATUTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <div className="k">Priorité</div>
+              <select className="input" value={t.priorite} onChange={e => patch({ priorite: e.target.value })}>
+                {PRIORITES.map(p => <option key={p} value={p}>{cap(p)}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <div className="k">Type</div>
+              <select className="input" value={t.type} onChange={e => patch({ type: e.target.value })}>
+                {TYPES.map(x => <option key={x} value={x}>{x === 'bug' ? 'Bug' : 'Tâche'}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <div className="k">Assigné</div>
+              <input className="input" style={{ width: '100%' }} placeholder="Prénom"
+                     value={assigne} onChange={e => setAssigne(e.target.value)} onBlur={saveText} />
+            </div>
+            <div className="field">
+              <div className="k">État actuel</div>
+              <span className={`pill ${meta.pill}`}>{meta.label}</span>
+            </div>
+            <div className="field">
+              <div className="k">Créé le</div>
+              <span className="muted">{new Date(t.cree_le).toLocaleDateString('fr-FR')}</span>
+            </div>
+            <button className="btn danger" onClick={remove} style={{ width: '100%' }}>Supprimer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
-*{box-sizing:border-box}
-body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
-button{font-family:inherit}
-.app-header{display:flex;align-items:center;gap:14px;padding:10px 18px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
-.logo{width:26px;height:26px;border-radius:7px;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:800}
-.brand{font-weight:700}
-.me{margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--sub)}
-.avatar{width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:12px}
-.av-sm{width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:10px;font-weight:700}
-.wrap{padding:18px;max-width:1200px;margin:0 auto}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.spread{justify-content:space-between}
-.muted{color:var(--sub)}
-.h1{font-size:20px;font-weight:700;margin:0 0 2px}
-.btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
-.btn:hover{filter:brightness(.96)}
-.btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line)}
-.btn.danger{background:#fff;color:var(--p-haute);border:1px solid #f3c9c9}
-.input,select,textarea{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:14px;background:#fff}
-.input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
 
-.pill{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
-.pill.todo{background:#eef2f6;color:var(--todo)}
-.pill.prog{background:#fff2e0;color:var(--prog)}
-.pill.bloque{background:#efe9fe;color:var(--block)}
-.pill.termine{background:#e3f6ef;color:var(--done)}
-.chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;border:1px solid var(--line);background:#fafbfc;color:var(--sub)}
-.chip.haute{color:var(--p-haute);border-color:#f6cccc;background:#fdecec}
-.chip.moyenne{color:var(--p-moy);border-color:#f3ddb8;background:#fdf3e3}
-.type{font-size:11px;font-weight:700;border-radius:5px;padding:2px 6px}
-.type.bug{background:#fdecec;color:var(--p-haute)}
-.type.tache{background:var(--accent-soft);color:var(--accent)}
-
-.board{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:16px}
-.col{background:#eef1f4;border-radius:var(--radius);padding:10px;min-height:120px}
-.col.drop{outline:2px dashed var(--accent);outline-offset:-4px}
-.col h3{display:flex;align-items:center;gap:8px;margin:2px 4px 12px;font-size:13px;text-transform:uppercase;letter-spacing:.03em;color:var(--sub)}
-.count{background:#fff;border:1px solid var(--line);border-radius:999px;padding:0 8px;font-size:11px;color:var(--sub)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:11px;margin-bottom:10px;box-shadow:var(--shadow);cursor:pointer}
-.card:hover{border-color:#cdd6e4}
-.card .ttl{font-weight:600;margin:4px 0 9px}
-.card .meta{display:flex;align-items:center;gap:7px;justify-content:space-between}
-.card .left{display:flex;gap:7px;align-items:center}
-.key{font-size:11px;color:var(--sub);font-weight:700}
-.mobile-move{display:none;margin-top:8px;width:100%}
-
-.overlay{position:fixed;inset:0;background:rgba(17,24,39,.45);display:grid;place-items:center;padding:18px;z-index:50}
-.modal{background:var(--card);border-radius:14px;width:100%;max-width:780px;max-height:90vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.2)}
-.modal .head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line)}
-.modal .body{display:grid;grid-template-columns:1fr 240px;gap:18px;padding:18px}
-.section-lbl{font-size:12px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.03em;margin:14px 0 6px}
-.desc{color:#374151;background:#fafbfc;border:1px solid var(--line);border-radius:8px;padding:12px;white-space:pre-wrap}
-.side{border-left:1px solid var(--line);padding-left:16px}
-.field{margin-bottom:12px}
-.field .k{font-size:12px;color:var(--sub);margin-bottom:3px}
-.comment{display:flex;gap:10px;margin-top:12px}
-.comment .c-body{background:#fafbfc;border:1px solid var(--line);border-radius:8px;padding:9px 11px;flex:1}
-.comment .who{font-weight:600;font-size:13px}
-.comment .when{color:var(--sub);font-size:11px;margin-left:6px}
-
-.filters{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
-.searchbar{display:flex;gap:8px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 14px;box-shadow:var(--shadow)}
-.searchbar input{border:none;outline:none;flex:1;font-size:14px;font-family:inherit}
-table.res{width:100%;border-collapse:collapse;margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
-table.res th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--sub);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
-table.res td{padding:11px 12px;border-bottom:1px solid var(--line)}
-table.res tr:last-child td{border-bottom:none}
-table.res tr:hover td{background:#fafbfe;cursor:pointer}
-
-.login{min-height:100vh;display:grid;place-items:center;background:var(--bg)}
-.login .box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px;width:340px;box-shadow:var(--shadow)}
-.login .box h1{margin:8px 0 2px;font-size:20px}
-.login label{display:block;font-size:13px;color:var(--sub);margin:12px 0 4px}
-.login input{width:100%}
-.login .btn{width:100%;margin-top:18px}
-.err{color:var(--p-haute);font-size:13px;margin-top:10px}
-.tabs{display:flex;gap:6px;margin-top:8px}
-.tab{border:none;background:transparent;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:600;color:var(--sub)}
-.tab.active{background:var(--card);color:var(--accent);box-shadow:var(--shadow)}
-
-@media(max-width:760px){
-  .board{grid-template-columns:1fr}
-  .modal .body{grid-template-columns:1fr}
-  .side{border-left:none;border-top:1px solid var(--line);padding-left:0;padding-top:14px}
-  .mobile-move{display:block}
-  .res .hide-m{display:none}
-}
+function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }

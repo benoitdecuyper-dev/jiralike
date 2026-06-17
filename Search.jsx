@@ -1,53 +1,74 @@
-import { useState } from 'react';
-import { supabase } from './supabaseClient.js';
+import { useEffect, useState } from 'react';
+import { listTickets } from './api.js';
+import { STATUTS, statutMeta } from './Board.jsx';
 
-export default function Login() {
-  const [mode, setMode] = useState('login'); // 'login' | 'signup'
-  const [email, setEmail] = useState('');
-  const [pw, setPw] = useState('');
-  const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
-  const [loading, setLoading] = useState(false);
+export default function Search({ projetId, onOpen }) {
+  const [q, setQ] = useState('');
+  const [statut, setStatut] = useState('');
+  const [priorite, setPriorite] = useState('');
+  const [type, setType] = useState('');
+  const [rows, setRows] = useState([]);
 
-  async function submit(e) {
-    e.preventDefault();
-    setErr(''); setMsg(''); setLoading(true);
-    if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password: pw });
-      setLoading(false);
-      if (error) { setErr(error.message); return; }
-      setMsg('Compte créé. Connecte-toi maintenant.');
-      setMode('login');
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password: pw });
-      setLoading(false);
-      if (error) setErr('Connexion impossible : ' + error.message);
-    }
-  }
+  useEffect(() => {
+    const filters = {};
+    if (q) filters.q = q;
+    if (statut) filters.statut = statut;
+    if (priorite) filters.priorite = priorite;
+    if (type) filters.type = type;
+    const id = setTimeout(() => {
+      listTickets(projetId, filters).then(setRows).catch(console.error);
+    }, 200); // debounce
+    return () => clearTimeout(id);
+  }, [projetId, q, statut, priorite, type]);
 
   return (
-    <div className="login">
-      <form className="box" onSubmit={submit}>
-        <div className="logo">J</div>
-        <h1>Jiralike</h1>
-        <div className="muted">
-          {mode === 'login' ? 'Connecte-toi à ton espace tickets.' : 'Crée ton compte Jiralike.'}
-        </div>
-        <label>Email</label>
-        <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-        <label>Mot de passe</label>
-        <input className="input" type="password" value={pw} onChange={e => setPw(e.target.value)} required minLength={6} />
-        <button className="btn" disabled={loading}>
-          {loading ? '…' : (mode === 'login' ? 'Se connecter' : 'Créer mon compte')}
+    <>
+      <div className="h1" style={{ marginTop: 12 }}>Recherche &amp; filtres</div>
+      <div className="searchbar">
+        <span>⌕</span>
+        <input placeholder="Rechercher dans les titres…" value={q} onChange={e => setQ(e.target.value)} />
+      </div>
+      <div className="filters">
+        <select className="input" value={statut} onChange={e => setStatut(e.target.value)}>
+          <option value="">Statut : tous</option>
+          {STATUTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+        <select className="input" value={priorite} onChange={e => setPriorite(e.target.value)}>
+          <option value="">Priorité : toutes</option>
+          {['basse', 'moyenne', 'haute'].map(p => <option key={p} value={p}>{cap(p)}</option>)}
+        </select>
+        <select className="input" value={type} onChange={e => setType(e.target.value)}>
+          <option value="">Type : tous</option>
+          <option value="tache">Tâche</option>
+          <option value="bug">Bug</option>
+        </select>
+        <button className="btn ghost" onClick={() => { setQ(''); setStatut(''); setPriorite(''); setType(''); }}>
+          Réinitialiser
         </button>
-        {err && <div className="err">{err}</div>}
-        {msg && <div className="muted" style={{ marginTop: 10 }}>{msg}</div>}
-        <div className="muted" style={{ marginTop: 14, fontSize: 13 }}>
-          {mode === 'login'
-            ? <>Pas encore de compte ? <a href="#" onClick={e => { e.preventDefault(); setErr(''); setMsg(''); setMode('signup'); }}>Créer un compte</a></>
-            : <>Déjà un compte ? <a href="#" onClick={e => { e.preventDefault(); setErr(''); setMsg(''); setMode('login'); }}>Se connecter</a></>}
-        </div>
-      </form>
-    </div>
+      </div>
+
+      <table className="res">
+        <thead>
+          <tr><th>Clé</th><th>Titre</th><th className="hide-m">Type</th><th>Priorité</th><th>Statut</th></tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && <tr><td colSpan="5" className="muted">Aucun résultat.</td></tr>}
+          {rows.map(t => {
+            const m = statutMeta(t.statut);
+            return (
+              <tr key={t.id} onClick={() => onOpen(t)}>
+                <td className="key">{t.id.slice(0, 8)}</td>
+                <td>{t.titre}</td>
+                <td className="hide-m"><span className={`type ${t.type}`}>{t.type === 'bug' ? 'Bug' : 'Tâche'}</span></td>
+                <td><span className={`chip ${t.priorite}`}>{cap(t.priorite)}</span></td>
+                <td><span className={`pill ${m.pill}`}>{m.label}</span></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </>
   );
 }
+
+function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
