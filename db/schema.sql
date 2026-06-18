@@ -94,9 +94,12 @@ create policy projet_insert on tickets.projet for insert
 create policy projet_update on tickets.projet for update
   using (tickets.is_membre(id));
 
--- membre_projet : un membre voit la liste ; le créateur du projet ajoute des membres
+-- membre_projet : un membre voit la liste ; le créateur du projet ajoute des membres.
+-- NB : on autorise aussi user_id = auth.uid() pour que la ligne soit relisible
+-- juste après INSERT en return=representation (la ligne n'est pas encore visible
+-- par is_membre() dans la même requête PostgREST).
 create policy membre_select on tickets.membre_projet for select
-  using (tickets.is_membre(projet_id));
+  using (user_id = auth.uid() or tickets.is_membre(projet_id));
 create policy membre_insert on tickets.membre_projet for insert
   with check (
     user_id = auth.uid()  -- on s'ajoute soi-même (à la création)
@@ -117,7 +120,12 @@ create policy comm_insert on tickets.commentaire for insert
     and exists (select 1 from tickets.ticket t where t.id = ticket_id and tickets.is_membre(t.projet_id))
   );
 
--- Exposer le schéma à l'API Supabase (à faire aussi dans Settings > API > Exposed schemas)
+-- Exposer le schéma à l'API Supabase.
+-- Option 1 (recommandée) : Settings > API > Exposed schemas > ajouter "tickets".
+-- Option 2 (par SQL, sans dashboard) : étendre la config PostgREST puis recharger.
+--   alter role authenticator set pgrst.db_schemas = 'public, graphql_public, tickets';
+--   notify pgrst, 'reload config';
+--   notify pgrst, 'reload schema';
 grant usage on schema tickets to anon, authenticated;
 grant all on all tables in schema tickets to authenticated;
 grant all on all functions in schema tickets to authenticated;
